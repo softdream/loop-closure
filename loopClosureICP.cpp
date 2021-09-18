@@ -17,6 +17,8 @@ void ICPLoopClosure::detectLoop( const slam::sensor::LaserScan &scan )
 	scanVec.push_back( scan );
 	
 	int loop_id = -1;
+	matchedScanID = -1;
+	
 	Eigen::Vector3f currPose = poseVec.back();
 	
 	if( poseVec.size() < NUM_EXCLUDE_RECENT + 1 ){
@@ -47,6 +49,7 @@ void ICPLoopClosure::detectLoop( const slam::sensor::LaserScan &scan )
 
 	float minLoss = 100000.0f, loss = 0.0f;
 
+
 	for ( int candidate_iter_idx = 0; candidate_iter_idx < NUM_CANDIDATES_FROM_TREE; candidate_iter_idx++ ){
 		sensor::LaserScan scanCandidate = scanVec[ candidate_indexes[ candidate_iter_idx ] ];
 	
@@ -56,13 +59,18 @@ void ICPLoopClosure::detectLoop( const slam::sensor::LaserScan &scan )
 		pointsNow.pointTransform2LaserCoords( scan );
 		pointsCandidate.pointTransform2LaserCoords( scanCandidate );
 	
-		loss = icp.solveICP( pointsCandidate, pointsNow );
+		//loss = icp.solveICP( pointsCandidate, pointsNow );
 
-		if( loss < minLoss ){
-			minLoss = loss;
-			matchedScanID = candidate_indexes[ candidate_iter_idx ];
-		}
-	
+		//if( loss < minLoss ){
+		//	minLoss = loss;
+		//	matchedScanID = candidate_indexes[ candidate_iter_idx ];
+		//}
+		
+		Eigen::Vector3f pose = poseVec[ candidate_indexes[ candidate_iter_idx ] ];
+		std::cout<<"------------------- Pose Candidate "<< candidate_iter_idx<<"-----------------------"<<std::endl;
+		std::cout<<"pose: "<<std::endl<<pose<<std::endl;
+		
+		matchedScanID = candidate_indexes[ candidate_iter_idx ];
 	}
 
 }

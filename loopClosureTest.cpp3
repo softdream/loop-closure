@@ -6,29 +6,7 @@
 #include "odomSimulation.h"
 
 #include "scanContext.h"
-
-void laserData2Container( const slam::sensor::LaserScan &scan, slam::ScanContainer &container )
-{
-        size_t size = 1440;
-
-        float angle = -3.14159f;
-        container.clear();
-
-        for( int i = 0; i < size; i ++ ){
-                float dist = scan.ranges[ i ];
-
-                if( dist >= 0.2000000030f && dist <= 20.0000000000f ){
-                        //dist *= scaleToMap;
-                        container.addData( Eigen::Vector2f( cos(angle) * dist, sin(angle) * dist ) );
-                }
-
-                angle += 0.0043542264f;
-        }
-
-        std::cout<<"Scan Container Size: "<<container.getSize()<<std::endl;
-}
-
-
+#include "loopClosureICP.h"
 
 bool poseDiffLargerThan( Eigen::Vector3f &poseOld, Eigen::Vector3f &poseNew )
 {
@@ -69,11 +47,7 @@ int main()
 	cv::Mat image = cv::Mat::zeros( 1200, 1200, CV_8UC3 );
 	
 	// 
-	//slam::LoopClosureBase *detect = new slam::ScanContextLoopClosure();
-		
-	// scan context
-	slam::ScanContext<float, 20> scanContext;
-
+	slam::ICPLoopClosure loop;
 
 	slam::simulation::Simulation simulation;
         slam::simulation::OdomSimulation odomSim;
@@ -92,6 +66,7 @@ int main()
 	scan.angle_increment = 0.0043542264f;
 	scan.range_min = 0.25000000030f;
 	scan.range_max = 25.0000000000f;
+	
 
         Eigen::Vector3f poseOld = Eigen::Vector3f::Zero();
         Eigen::Vector3f poseNew = poseOld;
@@ -108,43 +83,22 @@ int main()
 		odomSim.readAFrameData( poseNew );
                 std::cout<<"pose: "<<std::endl<<poseNew<<std::endl;
 
-		slam::ScanContainer scanContainer;
-		laserData2Container( scan, scanContainer );
-		scanContainer.displayAFrameScan( 20 );	
-	
 		if( poseDiffLargerThan( poseOld, poseNew ) ){
                         std::cerr<<"------------------ UPDATE ----------------"<<std::endl;
 			keyCount ++;
 			std::cout<<"keyCount = "<<keyCount <<std::endl;
 			keyPoses.push_back( poseNew );
 
-			// detect the loop closure
-			scanContext.makeAndSaveScancontextAndKeys( scan );
-			
-			scanContext.displayScanDistribution( scan );			
-			Eigen::MatrixXf desc = scanContext.makeScanContext( scan );
-			scanContext.displayAScancontext( desc );
-
-			std::pair<int, float> ret = scanContext.detectLoopClosureID();
-			int matchedID = ret.first;
+			loop.setPose( poseNew );
+			loop.detectLoop( scan );	
 		
-			if( matchedID != -1 ){
-			// draw the connected relationship
+			int matchedID = loop.getMatchedID();
+			if( loop.getMatchedID() != -1 ){
 				cv::line( image, cv::Point2f( poseNew(0) * 10 + 600, poseNew(1) * 10 + 800 ),
-						 cv::Point2f( keyPoses[matchedID](0) * 10 + 600 , keyPoses[matchedID](1) * 10 + 800 ),
-						 cv::Scalar( 0, 255, 0 ), 1 );
-				Eigen::MatrixXf scanContext1 = scanContext.getScanContext( matchedID );
-				//std::cout<<"scanContext1 : "<<std::endl<<scanContext1<<std::endl;
-				//Eigen::MatrixXf scanContext2 = scanContext.getScanContext( scanContext.getScanContextsSize() - 1 );
-				//std::cout<<"scanContext2 : "<<std::endl<<scanContext2<<std::endl;
-
-				Eigen::MatrixXf ringkey1 = scanContext.getRingKey( matchedID );
-				std::cout<<"ring key 1: "<<std::endl<<ringkey1<<std::endl<<std::endl;
-				Eigen::MatrixXf ringkey2 = scanContext.getRingKey( scanContext.getScanContextsSize() - 1 );
-                                std::cout<<"ring key 2: "<<std::endl<<ringkey2<<std::endl<<std::endl;
-
+                                                 cv::Point2f( keyPoses[matchedID](0) * 10 + 600 , keyPoses[matchedID](1) * 10 + 800 ),
+                                                 cv::Scalar( 0, 255, 0 ), 1 );
 			}
-
+			
 			dispalyOdom( image, poseNew );
 		
 			poseOld= poseNew;

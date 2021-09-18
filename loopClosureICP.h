@@ -28,6 +28,11 @@ public:
 
 	virtual void setPose( const Eigen::Vector3f &pose );
 
+	const int getMatchedID() const
+	{
+		return matchedScanID;
+	}
+	
 private:
 	ICP icp;
 	

@@ -43,13 +43,13 @@ public:
 	void displayAScancontext( const Eigen::MatrixXf &desc ) const;
 private:
 	template<typename TT>
-	TT rad2deg(TT radians)
+	const TT rad2deg( const TT radians)
 	{
     		return radians * 180.0 / M_PI;
 	}
 
 	template<typename TT>
-	TT deg2rad( TT angle )
+	const TT deg2rad( const TT angle )
 	{
 		return angle * M_PI / 180.0;
 	}
@@ -60,12 +60,17 @@ private:
 
 	const std::pair<float, int> distanceBetweenScancontexts( const Eigen::MatrixXf &_sc1, const Eigen::MatrixXf &_sc2 );
 	
+	// added
+	void drawABin(cv::Mat &image,  int ring_idx, const int sctor_idx);
+	
 public:
 	// added 
 	const Eigen::MatrixXf& getScanContext( int index ) const;
 	const Eigen::MatrixXf& getRingKey( int index ) const; 
 	const int getScanContextsSize() const;
 	
+	void displayScanDistribution( const slam::sensor::LaserScan &scan );
+
 private:	
 	myVectors ringKeysMat;	
 
@@ -78,7 +83,7 @@ private:
 	const int NUM_RING = 20;
 	const int NUM_SECTOR = 60;
 	
-	const float MAX_RADIUS = 8.0f;
+	const float MAX_RADIUS = 20.0f;
 	const float UNIT_SECTOR_ANGLE = 360.0 / float(NUM_SECTOR);
 	const float UNIT_RING_GAP = MAX_RADIUS / float(NUM_RING);
 	
@@ -119,7 +124,7 @@ const Eigen::MatrixXf ScanContext<T, Dimension>::makeScanContext( const slam::se
 		float dist = scan.ranges[i];
 		float angle = rad2deg<float>( radians ) + 180.0f;
 		
-		if( dist >= 0.009999998f && dist <= 8.0000000000f ){
+		if( dist >= 0.009999998f && dist <= 20.0000000000f ){
 			//std::cout<<"------------------------------------"<<std::endl;
 			//std::cout<<"dist = "<<dist<<", angle = "<<angle<<std::endl;
 			
@@ -134,7 +139,7 @@ const Eigen::MatrixXf ScanContext<T, Dimension>::makeScanContext( const slam::se
 			//std::cout<<"( ring_idx, sector_idx ): ( " <<ring_idx<<", "<<sctor_idx<<" ) = " <<desc(ring_idx, sctor_idx)<<std::endl;
 		}
 
-		radians += 0.0043633231f;
+		radians += 0.0043542264f;
 	}
 
 	return desc;
@@ -401,6 +406,54 @@ void ScanContext<T, Dimension>::displayAScancontext( const Eigen::MatrixXf &desc
 }
 
 template<typename T, int Dimension>
+void ScanContext<T, Dimension>::displayScanDistribution( const slam::sensor::LaserScan &scan ) 
+{
+	cv::Mat image = cv::Mat::zeros( 900, 900, CV_8UC3 );
+
+	for( int i = 0; i < NUM_RING; i ++ ){
+		cv::circle( image, cv::Point2f( 450, 450 ), 20 * ( i + 1 ), cv::Scalar( 0, 255, 0 ), 1 );
+	}
+
+	for( int i = 0; i < NUM_SECTOR; i ++ ){
+		float angle =  ( 6 * i );	
+	
+		cv::Point2f endPoint( 450 - ::sin( angle * M_PI / 180 ) * 400, 
+				      450 - ::cos( angle * M_PI / 180 ) * 400 );
+		cv::line( image, cv::Point2f( 450, 450 ), endPoint, cv::Scalar( 0, 255, 0 ), 1 );
+	}
+
+        cv::arrowedLine( image, cv::Point2f( 450, 900 ), cv::Point2f( 450, 20 ), cv::Scalar( 255, 0, 0 ), 1 );
+        cv::arrowedLine( image, cv::Point2f( 0, 450 ), cv::Point2f( 880, 450 ), cv::Scalar( 255, 0, 0 ), 1 );
+
+	
+	int ring_idx = 0, sctor_idx = 0;
+        float radians = -3.14159f;
+
+        for( int i = 0; i < scan.size(); i ++ ){
+                float dist = scan.ranges[i];
+                float angle = rad2deg<float>( radians ) + 180.0f;
+
+                if( dist >= 0.009999998f && dist <= 20.0000000000f ){
+                        ring_idx = std::max( std::min( NUM_RING - 1, int(ceil( (dist / MAX_RADIUS) * NUM_RING )) ), 0 );
+
+                        sctor_idx = std::max( std::min( NUM_SECTOR - 1, int(ceil( (angle / 360.0) * NUM_SECTOR )) ), 0 );
+
+			// draw the bin
+			//cv::Point2f binPoint( 450 - ( ring_idx * 20 ) * ::sin( sctor_idx * 6 * M_PI / 180 ) + 10, 
+			//		      450 - ( ring_idx * 20 ) * ::cos( sctor_idx * 6 * M_PI / 180 ) - 10 );
+			//cv::circle( image, binPoint, 3, cv::Scalar( 0, 0, 255 ), -1 );
+                
+			drawABin( image, ring_idx, sctor_idx );
+		}
+
+                radians += 0.0043542264f;
+        }
+
+	
+	cv::imshow( "scan distribution", image );
+}
+
+template<typename T, int Dimension>
 const Eigen::MatrixXf& ScanContext<T, Dimension>::getScanContext( int index ) const
 {
 	return scanContexts[index];
@@ -416,6 +469,41 @@ template<typename T, int Dimension>
 const int ScanContext<T, Dimension>::getScanContextsSize() const
 {
 	return scanContexts.size();
+}
+
+template<typename T, int Dimension>
+void ScanContext<T, Dimension>::drawABin(cv::Mat &image,  int ring_idx, const int sctor_idx)
+{
+	float angleStart1 = (sctor_idx) * 6 * M_PI / 180;
+	float radiusStart1 = (ring_idx) * 20;
+	float angleStart2 = (sctor_idx + 1) * 6 * M_PI / 180;
+	float radiusStart2 = (ring_idx + 1) * 20;
+
+	std::vector<std::vector<cv::Point>> ppPoints;
+	std::vector<cv::Point> pPoints;
+
+	for (int i = 0; i <= 6; i++) {
+		cv::Point p( 450 - radiusStart1 * sin(angleStart1 + i * 0.017453293),
+			     450 - radiusStart1 * cos(angleStart1 + i * 0.017453293));
+		pPoints.push_back( p );
+	}
+
+	for (int i = 0; i <= 6; i++) {
+		cv::Point p( 450 - radiusStart2 * sin( angleStart2 - i * 0.017453293),
+			     450 - radiusStart2 * cos( angleStart2 - i * 0.017453293));
+		pPoints.push_back( p );
+	}
+
+	ppPoints.push_back( pPoints );
+
+	/*for (auto it : pPoints) {
+		cv::circle(image, it, 3, cv::Scalar(0, 0, 255), -1);
+		cv::imshow("scan distribution", image);
+		cv::waitKey(2000);
+	}*/
+
+	cv::fillPoly( image, ppPoints, cv::Scalar( 0, 0, 255 ) );
+	//cv::fillPoly( image, ppPoints, cv::Scalar(b[64 - count], g[64 - count], r[64 - count]) );
 }
 
 }
